@@ -35,7 +35,7 @@ export const Auth = () => {
 
       if (isLogin) {
         // Login
-        const { error } = await supabase.auth.signInWithPassword({
+        const { data, error } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
@@ -44,24 +44,34 @@ export const Auth = () => {
           let errorMsg = 'Erro ao fazer login';
           
           // Mensagens específicas para diferentes tipos de erro
-          if (error.message.includes('Invalid login credentials')) {
-            errorMsg = 'Senha incorreta ou email não encontrado. Verifique suas credenciais.';
-          } else if (error.message.includes('Email not confirmed')) {
-            errorMsg = 'Email não confirmado. Verifique sua caixa de entrada e clique no link de confirmação.';
+          console.log('Erro completo do login:', error);
+          
+          if (error.message.includes('Invalid login credentials') || 
+              error.message.includes('Invalid') || 
+              error.message.includes('incorrect')) {
+            errorMsg = '❌ Senha incorreta ou email não encontrado. Verifique suas credenciais.';
+          } else if (error.message.includes('Email not confirmed') || 
+                     error.message.includes('email_not_confirmed') ||
+                     error.message.includes('not confirmed')) {
+            errorMsg = '⚠️ Email não confirmado! Verifique sua caixa de entrada (e spam) e clique no link de confirmação que enviamos.';
           } else {
-            errorMsg = error.message || 'Erro ao fazer login';
+            errorMsg = `Erro: ${error.message}`;
           }
           
           setErrorMessage(errorMsg);
           toast.error(errorMsg);
+          console.error('Erro no login:', error);
           throw error;
         }
 
-        setSuccessMessage('Login realizado com sucesso!');
-        toast.success('Login realizado com sucesso! 🎉', {
-          duration: 3000,
-          icon: '✅',
-        });
+        // Verificar se o usuário foi autenticado
+        if (data?.user) {
+          setSuccessMessage('Login realizado com sucesso!');
+          toast.success('Login realizado com sucesso! 🎉', {
+            duration: 3000,
+            icon: '✅',
+          });
+        }
       } else {
         // Signup - Configurar URL de redirecionamento
         const redirectTo = window.location.origin;
