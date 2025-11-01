@@ -3,9 +3,18 @@ import { Transaction, TransactionInput } from '../types/transaction';
 
 export const transactionService = {
   async getAll(): Promise<Transaction[]> {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      throw new Error('Usuário não autenticado');
+    }
+
     const { data, error } = await supabase
       .from('transactions')
       .select('*')
+      .eq('user_id', user.id)
       .order('date', { ascending: false });
 
     if (error) {
@@ -16,9 +25,17 @@ export const transactionService = {
   },
 
   async create(transaction: TransactionInput): Promise<Transaction> {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      throw new Error('Usuário não autenticado');
+    }
+
     const { data, error } = await supabase
       .from('transactions')
-      .insert([transaction])
+      .insert([{ ...transaction, user_id: user.id }])
       .select()
       .single();
 
@@ -30,10 +47,19 @@ export const transactionService = {
   },
 
   async delete(id: string): Promise<void> {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      throw new Error('Usuário não autenticado');
+    }
+
     const { error } = await supabase
       .from('transactions')
       .delete()
-      .eq('id', id);
+      .eq('id', id)
+      .eq('user_id', user.id); // Garantir que só deleta suas próprias transações
 
     if (error) {
       throw new Error(error.message);
@@ -41,9 +67,18 @@ export const transactionService = {
   },
 
   async getMonthlyBalances(): Promise<{ month: string; entries: number; expenses: number }[]> {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      throw new Error('Usuário não autenticado');
+    }
+
     const { data, error } = await supabase
       .from('transactions')
-      .select('date, amount, type');
+      .select('date, amount, type')
+      .eq('user_id', user.id);
 
     if (error) {
       throw new Error(error.message);
@@ -76,9 +111,18 @@ export const transactionService = {
   },
 
   async getTotalBalance(): Promise<number> {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      throw new Error('Usuário não autenticado');
+    }
+
     const { data, error } = await supabase
       .from('transactions')
-      .select('amount, type');
+      .select('amount, type')
+      .eq('user_id', user.id);
 
     if (error) {
       throw new Error(error.message);

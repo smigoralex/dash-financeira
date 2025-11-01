@@ -1,13 +1,17 @@
 import { Toaster } from 'react-hot-toast';
-import { HiRefresh } from 'react-icons/hi';
+import toast from 'react-hot-toast';
+import { HiRefresh, HiLogout } from 'react-icons/hi';
+import { Auth } from './components/Auth';
 import { TransactionForm } from './components/TransactionForm';
 import { TransactionTable } from './components/TransactionTable';
 import { Dashboard } from './components/Dashboard';
+import { useAuth } from './hooks/useAuth';
 import { useTransactions } from './hooks/useTransactions';
 import { useMonthlyBalances } from './hooks/useMonthlyBalances';
 import { useTotalBalance } from './hooks/useTotalBalance';
 
 function App() {
+  const { user, loading: authLoading, signOut } = useAuth();
   const { transactions, loading, refetch: refetchTransactions } = useTransactions();
   const { refetch: refetchBalances } = useMonthlyBalances();
   const { refetch: refetchTotal } = useTotalBalance();
@@ -17,6 +21,27 @@ function App() {
     refetchBalances();
     refetchTotal();
   };
+
+  const handleSignOut = async () => {
+    await signOut();
+    toast.success('Logout realizado com sucesso!');
+  };
+
+  // Mostrar tela de login se não estiver autenticado
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Carregando...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Auth />;
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -32,13 +57,26 @@ function App() {
                 Controle suas receitas e despesas de forma simples
               </p>
             </div>
-            <button
-              onClick={handleRefresh}
-              className="p-2 sm:p-3 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
-              title="Atualizar dados"
-            >
-              <HiRefresh className="w-5 h-5 sm:w-6 sm:h-6" />
-            </button>
+            <div className="flex items-center gap-3">
+              <div className="hidden sm:block text-right">
+                <p className="text-xs text-gray-500">Logado como</p>
+                <p className="text-sm font-medium text-gray-700">{user.email}</p>
+              </div>
+              <button
+                onClick={handleRefresh}
+                className="p-2 sm:p-3 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
+                title="Atualizar dados"
+              >
+                <HiRefresh className="w-5 h-5 sm:w-6 sm:h-6" />
+              </button>
+              <button
+                onClick={handleSignOut}
+                className="p-2 sm:p-3 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
+                title="Sair"
+              >
+                <HiLogout className="w-5 h-5 sm:w-6 sm:h-6" />
+              </button>
+            </div>
           </div>
         </div>
       </header>
