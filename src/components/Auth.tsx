@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
-import { HiMail, HiLockClosed, HiUser } from 'react-icons/hi';
+import { HiMail, HiLockClosed, HiUser, HiCheckCircle } from 'react-icons/hi';
 
 export const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,6 +25,7 @@ export const Auth = () => {
 
     try {
       setLoading(true);
+      setEmailSent(false);
 
       if (isLogin) {
         // Login
@@ -36,22 +38,72 @@ export const Auth = () => {
 
         toast.success('Login realizado com sucesso!');
       } else {
-        // Signup
+        // Signup - Configurar URL de redirecionamento
+        const redirectTo = window.location.origin;
+        
         const { error } = await supabase.auth.signUp({
           email,
           password,
+          options: {
+            emailRedirectTo: redirectTo,
+          },
         });
 
         if (error) throw error;
 
-        toast.success('Conta criada com sucesso! Verifique seu email.');
+        setEmailSent(true);
+        toast.success('Email de confirmação enviado! Verifique sua caixa de entrada.', {
+          duration: 5000,
+        });
       }
     } catch (error: any) {
       toast.error(error.message || 'Erro ao autenticar');
+      setEmailSent(false);
     } finally {
       setLoading(false);
     }
   };
+
+  // Tela de confirmação após envio de email
+  if (emailSent) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md text-center">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-4">
+            <HiCheckCircle className="w-10 h-10 text-green-600" />
+          </div>
+          <h1 className="text-2xl font-bold text-gray-800 mb-4">
+            Email Enviado! 📧
+          </h1>
+          <p className="text-gray-600 mb-2">
+            Enviamos um email de confirmação para:
+          </p>
+          <p className="text-blue-600 font-semibold mb-6">{email}</p>
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 text-left">
+            <p className="text-sm text-gray-700 mb-2">
+              <strong>Próximos passos:</strong>
+            </p>
+            <ol className="text-sm text-gray-600 space-y-1 list-decimal list-inside">
+              <li>Verifique sua caixa de entrada (e spam)</li>
+              <li>Clique no link de confirmação no email</li>
+              <li>Volte aqui e faça login</li>
+            </ol>
+          </div>
+          <button
+            onClick={() => {
+              setEmailSent(false);
+              setIsLogin(true);
+              setEmail('');
+              setPassword('');
+            }}
+            className="w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white py-3 px-4 rounded-lg font-medium hover:from-blue-600 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all"
+          >
+            Voltar para Login
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 flex items-center justify-center p-4">
@@ -108,6 +160,11 @@ export const Auth = () => {
                 required
               />
             </div>
+            {!isLogin && (
+              <p className="mt-2 text-xs text-gray-500">
+                Mínimo de 6 caracteres
+              </p>
+            )}
           </div>
 
           {/* Submit Button */}
@@ -152,6 +209,7 @@ export const Auth = () => {
                 setIsLogin(!isLogin);
                 setEmail('');
                 setPassword('');
+                setEmailSent(false);
               }}
               className="text-sm text-blue-600 hover:text-blue-800 font-medium transition-colors"
             >
