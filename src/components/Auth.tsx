@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
-import { HiMail, HiLockClosed, HiUser, HiCheckCircle, HiArrowLeft } from 'react-icons/hi';
+import { HiMail, HiLockClosed, HiUser, HiCheckCircle, HiArrowLeft, HiXCircle } from 'react-icons/hi';
 
 export const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
@@ -10,23 +10,28 @@ export const Auth = () => {
   const [loading, setLoading] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
   const [showResetPassword, setShowResetPassword] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMessage(null);
+    setSuccessMessage(null);
 
     if (!email || !password) {
+      setErrorMessage('Preencha todos os campos');
       toast.error('Preencha todos os campos');
       return;
     }
 
     if (password.length < 6) {
+      setErrorMessage('A senha deve ter pelo menos 6 caracteres');
       toast.error('A senha deve ter pelo menos 6 caracteres');
       return;
     }
 
     try {
       setLoading(true);
-      setEmailSent(false);
 
       if (isLogin) {
         // Login
@@ -36,17 +41,23 @@ export const Auth = () => {
         });
 
         if (error) {
+          let errorMsg = 'Erro ao fazer login';
+          
           // Mensagens específicas para diferentes tipos de erro
           if (error.message.includes('Invalid login credentials')) {
-            toast.error('Email ou senha incorretos. Verifique suas credenciais.');
+            errorMsg = 'Senha incorreta ou email não encontrado. Verifique suas credenciais.';
           } else if (error.message.includes('Email not confirmed')) {
-            toast.error('Email não confirmado. Verifique sua caixa de entrada.');
+            errorMsg = 'Email não confirmado. Verifique sua caixa de entrada e clique no link de confirmação.';
           } else {
-            toast.error(error.message || 'Erro ao fazer login');
+            errorMsg = error.message || 'Erro ao fazer login';
           }
+          
+          setErrorMessage(errorMsg);
+          toast.error(errorMsg);
           throw error;
         }
 
+        setSuccessMessage('Login realizado com sucesso!');
         toast.success('Login realizado com sucesso! 🎉', {
           duration: 3000,
           icon: '✅',
@@ -64,21 +75,27 @@ export const Auth = () => {
         });
 
         if (error) {
+          let errorMsg = 'Erro ao criar conta';
+          
           if (error.message.includes('already registered')) {
-            toast.error('Este email já está cadastrado. Tente fazer login.');
+            errorMsg = 'Este email já está cadastrado. Tente fazer login.';
           } else {
-            toast.error(error.message || 'Erro ao criar conta');
+            errorMsg = error.message || 'Erro ao criar conta';
           }
+          
+          setErrorMessage(errorMsg);
+          toast.error(errorMsg);
           throw error;
         }
 
         setEmailSent(true);
+        setSuccessMessage('Conta criada com sucesso! Confirme no email que você recebeu.');
         toast.success('Email de confirmação enviado! Verifique sua caixa de entrada.', {
           duration: 5000,
         });
       }
     } catch (error: any) {
-      // Erro já tratado acima, apenas para não quebrar o fluxo
+      // Erro já tratado acima
     } finally {
       setLoading(false);
     }
@@ -86,8 +103,10 @@ export const Auth = () => {
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMessage(null);
 
     if (!email) {
+      setErrorMessage('Digite seu email para recuperar a senha');
       toast.error('Digite seu email para recuperar a senha');
       return;
     }
@@ -101,11 +120,16 @@ export const Auth = () => {
       });
 
       if (error) {
+        let errorMsg = 'Erro ao enviar email de recuperação';
+        
         if (error.message.includes('not found')) {
-          toast.error('Email não encontrado. Verifique se digitou corretamente.');
+          errorMsg = 'Email não encontrado. Verifique se digitou corretamente.';
         } else {
-          toast.error(error.message || 'Erro ao enviar email de recuperação');
+          errorMsg = error.message || 'Erro ao enviar email de recuperação';
         }
+        
+        setErrorMessage(errorMsg);
+        toast.error(errorMsg);
         return;
       }
 
@@ -152,6 +176,8 @@ export const Auth = () => {
               setIsLogin(true);
               setEmail('');
               setPassword('');
+              setSuccessMessage(null);
+              setErrorMessage(null);
             }}
             className="w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white py-3 px-4 rounded-lg font-medium hover:from-blue-600 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all"
           >
@@ -171,6 +197,7 @@ export const Auth = () => {
             onClick={() => {
               setShowResetPassword(false);
               setEmail('');
+              setErrorMessage(null);
             }}
             className="mb-4 flex items-center gap-2 text-gray-600 hover:text-gray-800 transition-colors"
           >
@@ -190,6 +217,14 @@ export const Auth = () => {
             </p>
           </div>
 
+          {/* Mensagem de erro */}
+          {errorMessage && (
+            <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
+              <HiXCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-red-800">{errorMessage}</p>
+            </div>
+          )}
+
           <form onSubmit={handleResetPassword} className="space-y-6">
             <div>
               <label htmlFor="reset-email" className="block text-sm font-medium text-gray-700 mb-2">
@@ -201,7 +236,10 @@ export const Auth = () => {
                   id="reset-email"
                   type="email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    setErrorMessage(null);
+                  }}
                   className="w-full pl-10 pr-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
                   placeholder="seu@email.com"
                   required
@@ -264,6 +302,22 @@ export const Auth = () => {
           </p>
         </div>
 
+        {/* Mensagem de sucesso */}
+        {successMessage && (
+          <div className="mb-4 bg-green-50 border border-green-200 rounded-lg p-4 flex items-start gap-3">
+            <HiCheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-green-800">{successMessage}</p>
+          </div>
+        )}
+
+        {/* Mensagem de erro */}
+        {errorMessage && (
+          <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
+            <HiXCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-red-800">{errorMessage}</p>
+          </div>
+        )}
+
         <form onSubmit={handleAuth} className="space-y-6">
           {/* Email */}
           <div>
@@ -276,7 +330,11 @@ export const Auth = () => {
                 id="email"
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  setErrorMessage(null);
+                  setSuccessMessage(null);
+                }}
                 className="w-full pl-10 pr-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
                 placeholder="seu@email.com"
                 required
@@ -296,6 +354,8 @@ export const Auth = () => {
                   onClick={() => {
                     setShowResetPassword(true);
                     setPassword('');
+                    setErrorMessage(null);
+                    setSuccessMessage(null);
                   }}
                   className="text-sm text-blue-600 hover:text-blue-800 font-medium transition-colors"
                 >
@@ -309,7 +369,11 @@ export const Auth = () => {
                 id="password"
                 type="password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  setErrorMessage(null);
+                  setSuccessMessage(null);
+                }}
                 className="w-full pl-10 pr-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
                 placeholder="••••••••"
                 minLength={6}
@@ -366,6 +430,8 @@ export const Auth = () => {
                 setEmail('');
                 setPassword('');
                 setEmailSent(false);
+                setErrorMessage(null);
+                setSuccessMessage(null);
               }}
               className="text-sm text-blue-600 hover:text-blue-800 font-medium transition-colors"
             >

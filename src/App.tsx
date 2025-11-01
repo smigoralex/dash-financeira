@@ -1,7 +1,9 @@
+import { useEffect, useState } from 'react';
 import { Toaster } from 'react-hot-toast';
 import toast from 'react-hot-toast';
 import { HiRefresh, HiLogout } from 'react-icons/hi';
 import { Auth } from './components/Auth';
+import { ResetPassword } from './components/ResetPassword';
 import { TransactionForm } from './components/TransactionForm';
 import { TransactionTable } from './components/TransactionTable';
 import { Dashboard } from './components/Dashboard';
@@ -9,12 +11,26 @@ import { useAuth } from './hooks/useAuth';
 import { useTransactions } from './hooks/useTransactions';
 import { useMonthlyBalances } from './hooks/useMonthlyBalances';
 import { useTotalBalance } from './hooks/useTotalBalance';
+import { supabase } from './lib/supabase';
 
 function App() {
   const { user, loading: authLoading, signOut } = useAuth();
   const { transactions, loading, refetch: refetchTransactions } = useTransactions();
   const { refetch: refetchBalances } = useMonthlyBalances();
   const { refetch: refetchTotal } = useTotalBalance();
+  const [showResetPassword, setShowResetPassword] = useState(false);
+
+  // Verificar se há token de reset password na URL
+  useEffect(() => {
+    const hashParams = new URLSearchParams(window.location.hash.substring(1));
+    const type = hashParams.get('type');
+    
+    if (type === 'recovery') {
+      setShowResetPassword(true);
+      // Limpar a URL
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  }, []);
 
   const handleRefresh = () => {
     refetchTransactions();
@@ -27,6 +43,14 @@ function App() {
     toast.success('Logout realizado com sucesso!');
   };
 
+  const handleResetPasswordSuccess = async () => {
+    // Fazer logout e limpar estado
+    await supabase.auth.signOut();
+    setShowResetPassword(false);
+    // Limpar URL
+    window.history.replaceState(null, '', window.location.pathname);
+  };
+
   // Mostrar tela de login se não estiver autenticado
   if (authLoading) {
     return (
@@ -37,6 +61,11 @@ function App() {
         </div>
       </div>
     );
+  }
+
+  // Mostrar página de reset de senha se houver token na URL
+  if (showResetPassword && !user) {
+    return <ResetPassword onSuccess={handleResetPasswordSuccess} />;
   }
 
   if (!user) {
