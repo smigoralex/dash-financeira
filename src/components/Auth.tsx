@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
-import { HiMail, HiLockClosed, HiUser, HiCheckCircle } from 'react-icons/hi';
+import { HiMail, HiLockClosed, HiUser, HiCheckCircle, HiArrowLeft } from 'react-icons/hi';
 
 export const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
@@ -9,6 +9,7 @@ export const Auth = () => {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
+  const [showResetPassword, setShowResetPassword] = useState(false);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,9 +35,22 @@ export const Auth = () => {
           password,
         });
 
-        if (error) throw error;
+        if (error) {
+          // Mensagens específicas para diferentes tipos de erro
+          if (error.message.includes('Invalid login credentials')) {
+            toast.error('Email ou senha incorretos. Verifique suas credenciais.');
+          } else if (error.message.includes('Email not confirmed')) {
+            toast.error('Email não confirmado. Verifique sua caixa de entrada.');
+          } else {
+            toast.error(error.message || 'Erro ao fazer login');
+          }
+          throw error;
+        }
 
-        toast.success('Login realizado com sucesso!');
+        toast.success('Login realizado com sucesso! 🎉', {
+          duration: 3000,
+          icon: '✅',
+        });
       } else {
         // Signup - Configurar URL de redirecionamento
         const redirectTo = window.location.origin;
@@ -49,7 +63,14 @@ export const Auth = () => {
           },
         });
 
-        if (error) throw error;
+        if (error) {
+          if (error.message.includes('already registered')) {
+            toast.error('Este email já está cadastrado. Tente fazer login.');
+          } else {
+            toast.error(error.message || 'Erro ao criar conta');
+          }
+          throw error;
+        }
 
         setEmailSent(true);
         toast.success('Email de confirmação enviado! Verifique sua caixa de entrada.', {
@@ -57,8 +78,44 @@ export const Auth = () => {
         });
       }
     } catch (error: any) {
-      toast.error(error.message || 'Erro ao autenticar');
-      setEmailSent(false);
+      // Erro já tratado acima, apenas para não quebrar o fluxo
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!email) {
+      toast.error('Digite seu email para recuperar a senha');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const redirectTo = window.location.origin;
+      
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${redirectTo}/reset-password`,
+      });
+
+      if (error) {
+        if (error.message.includes('not found')) {
+          toast.error('Email não encontrado. Verifique se digitou corretamente.');
+        } else {
+          toast.error(error.message || 'Erro ao enviar email de recuperação');
+        }
+        return;
+      }
+
+      toast.success('Email de recuperação enviado! Verifique sua caixa de entrada.', {
+        duration: 5000,
+      });
+      setShowResetPassword(false);
+      setEmail('');
+    } catch (error: any) {
+      toast.error('Erro ao enviar email de recuperação');
     } finally {
       setLoading(false);
     }
@@ -105,6 +162,91 @@ export const Auth = () => {
     );
   }
 
+  // Tela de reset de senha
+  if (showResetPassword) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
+          <button
+            onClick={() => {
+              setShowResetPassword(false);
+              setEmail('');
+            }}
+            className="mb-4 flex items-center gap-2 text-gray-600 hover:text-gray-800 transition-colors"
+          >
+            <HiArrowLeft className="w-5 h-5" />
+            <span className="text-sm font-medium">Voltar para login</span>
+          </button>
+
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full mb-4">
+              <HiLockClosed className="w-8 h-8 text-white" />
+            </div>
+            <h1 className="text-3xl font-bold text-gray-800 mb-2">
+              Recuperar Senha
+            </h1>
+            <p className="text-gray-600">
+              Digite seu email e enviaremos um link para redefinir sua senha
+            </p>
+          </div>
+
+          <form onSubmit={handleResetPassword} className="space-y-6">
+            <div>
+              <label htmlFor="reset-email" className="block text-sm font-medium text-gray-700 mb-2">
+                Email
+              </label>
+              <div className="relative">
+                <HiMail className="absolute left-3 top-3.5 h-5 w-5 text-gray-400" />
+                <input
+                  id="reset-email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                  placeholder="seu@email.com"
+                  required
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white py-3 px-4 rounded-lg font-medium hover:from-blue-600 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all transform hover:scale-[1.02]"
+            >
+              {loading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <svg
+                    className="animate-spin h-5 w-5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    ></circle>
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    ></path>
+                  </svg>
+                  Enviando...
+                </span>
+              ) : (
+                'Enviar Email de Recuperação'
+              )}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
@@ -144,9 +286,23 @@ export const Auth = () => {
 
           {/* Password */}
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
-              Senha
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+                Senha
+              </label>
+              {isLogin && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowResetPassword(true);
+                    setPassword('');
+                  }}
+                  className="text-sm text-blue-600 hover:text-blue-800 font-medium transition-colors"
+                >
+                  Esqueceu a senha?
+                </button>
+              )}
+            </div>
             <div className="relative">
               <HiLockClosed className="absolute left-3 top-3.5 h-5 w-5 text-gray-400" />
               <input
