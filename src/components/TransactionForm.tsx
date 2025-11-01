@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { TransactionType, TransactionInput } from '../types/transaction';
+import { TransactionInput } from '../types/transaction';
 import { transactionService } from '../services/transactionService';
 import toast from 'react-hot-toast';
 import { HiPlus, HiMinus, HiCalendar, HiDocumentText, HiCurrencyDollar, HiX } from 'react-icons/hi';
