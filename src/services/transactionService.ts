@@ -46,6 +46,30 @@ export const transactionService = {
     return data;
   },
 
+  async update(id: string, transaction: TransactionInput): Promise<Transaction> {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      throw new Error('Usuário não autenticado');
+    }
+
+    const { data, error } = await supabase
+      .from('transactions')
+      .update(transaction)
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return data;
+  },
+
   async delete(id: string): Promise<void> {
     const {
       data: { user },

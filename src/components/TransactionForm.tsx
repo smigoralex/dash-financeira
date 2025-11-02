@@ -18,23 +18,38 @@ export const TransactionForm = ({ onSuccess }: TransactionFormProps) => {
   const [loading, setLoading] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const [errors, setErrors] = useState<{ description?: string; amount?: string }>({});
+
+  const validateForm = () => {
+    const newErrors: { description?: string; amount?: string } = {};
 
     if (!formData.description.trim()) {
-      toast.error('A descrição é obrigatória');
-      return;
+      newErrors.description = 'A descrição é obrigatória';
     }
 
     if (formData.amount <= 0) {
-      toast.error('O valor deve ser maior que zero');
+      newErrors.amount = 'O valor deve ser maior que zero';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrors({});
+
+    if (!validateForm()) {
       return;
     }
 
     try {
       setLoading(true);
       await transactionService.create(formData);
-      toast.success('Transação adicionada com sucesso!');
+      toast.success('Transação adicionada com sucesso! ✨', {
+        duration: 3000,
+        icon: '✅',
+      });
       setFormData({
         date: new Date().toISOString().split('T')[0],
         description: '',
@@ -44,7 +59,9 @@ export const TransactionForm = ({ onSuccess }: TransactionFormProps) => {
       setIsExpanded(false);
       onSuccess();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Erro ao adicionar transação');
+      toast.error(error instanceof Error ? error.message : 'Erro ao adicionar transação', {
+        duration: 4000,
+      });
     } finally {
       setLoading(false);
     }
@@ -59,11 +76,12 @@ export const TransactionForm = ({ onSuccess }: TransactionFormProps) => {
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-md overflow-hidden mb-6">
+    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden mb-6 transition-colors" data-transaction-form>
       {/* Header - Sempre visível */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full p-4 sm:p-6 flex items-center justify-between hover:bg-gray-50 transition-colors"
+        className="w-full p-4 sm:p-6 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+        data-expand-form
       >
             <div className="flex items-center gap-3">
               <div
@@ -80,8 +98,8 @@ export const TransactionForm = ({ onSuccess }: TransactionFormProps) => {
                 )}
               </div>
           <div className="text-left">
-            <h2 className="text-lg sm:text-xl font-bold text-gray-800">Nova Transação</h2>
-            <p className="text-xs sm:text-sm text-gray-500">Clique para expandir</p>
+            <h2 className="text-lg sm:text-xl font-bold text-gray-800 dark:text-gray-200">Nova Transação</h2>
+            <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">Clique para expandir</p>
           </div>
         </div>
         <svg
@@ -98,14 +116,14 @@ export const TransactionForm = ({ onSuccess }: TransactionFormProps) => {
 
       {/* Form - Expansível */}
       {isExpanded && (
-        <div className="p-4 sm:p-6 border-t border-gray-200">
+        <div className="p-4 sm:p-6 border-t border-gray-200 dark:border-gray-700">
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Tipo e Data - Linha única no desktop */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label
                   htmlFor="type"
-                  className="block text-sm font-medium text-gray-700 mb-2"
+                  className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
                 >
                   Tipo de Transação
                 </label>
@@ -116,7 +134,7 @@ export const TransactionForm = ({ onSuccess }: TransactionFormProps) => {
                     className={`px-4 py-3 rounded-lg border-2 font-medium transition-all ${
                       formData.type === 'entrada'
                         ? 'bg-green-50 border-green-500 text-green-700'
-                        : 'bg-white border-gray-300 text-gray-700 hover:border-green-300'
+                        : 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:border-green-300 dark:hover:border-green-500'
                     }`}
                   >
                     <div className="flex items-center justify-center gap-2">
@@ -130,7 +148,7 @@ export const TransactionForm = ({ onSuccess }: TransactionFormProps) => {
                     className={`px-4 py-3 rounded-lg border-2 font-medium transition-all ${
                       formData.type === 'saida'
                         ? 'bg-red-50 border-red-500 text-red-700'
-                        : 'bg-white border-gray-300 text-gray-700 hover:border-red-300'
+                        : 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:border-red-300 dark:hover:border-red-500'
                     }`}
                   >
                     <div className="flex items-center justify-center gap-2">
@@ -154,7 +172,7 @@ export const TransactionForm = ({ onSuccess }: TransactionFormProps) => {
                   id="date"
                   value={formData.date}
                   onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                  className="w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 transition-all"
                   required
                 />
               </div>
@@ -173,13 +191,23 @@ export const TransactionForm = ({ onSuccess }: TransactionFormProps) => {
                 type="text"
                 id="description"
                 value={formData.description}
-                onChange={(e) =>
-                  setFormData({ ...formData, description: e.target.value })
-                }
-                className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                onChange={(e) => {
+                  setFormData({ ...formData, description: e.target.value });
+                  if (errors.description) setErrors({ ...errors, description: undefined });
+                }}
+                className={`w-full px-4 py-3 border-2 rounded-lg focus:outline-none focus:ring-2 transition-all ${
+                  errors.description
+                    ? 'border-red-300 dark:border-red-600 focus:ring-red-500 focus:border-red-500'
+                    : 'border-gray-300 dark:border-gray-600 focus:ring-blue-500 focus:border-blue-500'
+                }`}
                 placeholder="Ex: Salário, Conta de luz, Supermercado..."
                 required
               />
+              {errors.description && (
+                <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
+                  <span>⚠️</span> {errors.description}
+                </p>
+              )}
             </div>
 
             {/* Valor */}
@@ -192,26 +220,36 @@ export const TransactionForm = ({ onSuccess }: TransactionFormProps) => {
                 Valor
               </label>
               <div className="relative">
-                <span className="absolute left-4 top-3.5 text-gray-500 font-medium">R$</span>
+                <span className="absolute left-4 top-3.5 text-gray-500 dark:text-gray-400 font-medium">R$</span>
                 <input
                   type="number"
                   id="amount"
                   value={formData.amount || ''}
-                  onChange={(e) =>
+                  onChange={(e) => {
                     setFormData({
                       ...formData,
                       amount: parseFloat(e.target.value) || 0,
-                    })
-                  }
-                  className="w-full pl-10 pr-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                    });
+                    if (errors.amount) setErrors({ ...errors, amount: undefined });
+                  }}
+                  className={`w-full pl-10 pr-4 py-3 border-2 rounded-lg focus:outline-none focus:ring-2 transition-all bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${
+                    errors.amount
+                      ? 'border-red-300 focus:ring-red-500 focus:border-red-500'
+                      : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
+                  }`}
                   placeholder="0,00"
                   min="0"
                   step="0.01"
                   required
                 />
               </div>
-              {formData.amount > 0 && (
-                <p className="mt-2 text-sm text-gray-600">
+              {errors.amount && (
+                <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
+                  <span>⚠️</span> {errors.amount}
+                </p>
+              )}
+              {formData.amount > 0 && !errors.amount && (
+                <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
                   Valor formatado: <span className="font-semibold">{formatCurrency(formData.amount)}</span>
                 </p>
               )}
@@ -270,7 +308,7 @@ export const TransactionForm = ({ onSuccess }: TransactionFormProps) => {
                     type: 'entrada',
                   });
                 }}
-                className="px-6 py-3 border-2 border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-gray-50 transition-all flex items-center justify-center gap-2"
+                className="px-6 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-lg font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all flex items-center justify-center gap-2"
               >
                 <HiX className="w-4 h-4" />
                 Cancelar

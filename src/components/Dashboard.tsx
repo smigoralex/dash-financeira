@@ -1,8 +1,13 @@
+import { useMemo } from 'react';
 import { useMonthlyBalances } from '../hooks/useMonthlyBalances';
 import { useTotalBalance } from '../hooks/useTotalBalance';
 import { useTransactions } from '../hooks/useTransactions';
+import { useCountUp } from '../hooks/useCountUp';
 import { format } from 'date-fns';
 import ptBR from 'date-fns/locale/pt-BR';
+import { LiveIndicator } from './LiveIndicator';
+import { EmptyState } from './EmptyState';
+import { SkeletonLoader } from './SkeletonLoader';
 import {
   LineChart,
   Line,
@@ -26,6 +31,17 @@ export const Dashboard = () => {
   const { balances, loading: balancesLoading } = useMonthlyBalances();
   const { totalBalance, loading: totalLoading } = useTotalBalance();
   const { transactions } = useTransactions();
+  
+  // Animações count-up
+  const animatedTotalBalance = useCountUp(totalBalance, { duration: 1500, decimals: 2 });
+  const animatedTotalEntries = useCountUp(
+    useMemo(() => transactions.filter((t) => t.type === 'entrada').reduce((sum, t) => sum + t.amount, 0), [transactions]),
+    { duration: 1500, decimals: 2 }
+  );
+  const animatedTotalExpenses = useCountUp(
+    useMemo(() => transactions.filter((t) => t.type === 'saida').reduce((sum, t) => sum + t.amount, 0), [transactions]),
+    { duration: 1500, decimals: 2 }
+  );
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -67,13 +83,18 @@ export const Dashboard = () => {
     balance: balance.entries - balance.expenses,
   }));
 
-  // Dados para gráfico de pizza (total geral)
-  const totalEntries = transactions
-    .filter((t) => t.type === 'entrada')
-    .reduce((sum, t) => sum + t.amount, 0);
-  const totalExpenses = transactions
-    .filter((t) => t.type === 'saida')
-    .reduce((sum, t) => sum + t.amount, 0);
+  // Dados para gráfico de pizza (total geral) - usando useMemo para recalcular quando transactions mudar
+  const totalEntries = useMemo(() => {
+    return transactions
+      .filter((t) => t.type === 'entrada')
+      .reduce((sum, t) => sum + t.amount, 0);
+  }, [transactions]);
+
+  const totalExpenses = useMemo(() => {
+    return transactions
+      .filter((t) => t.type === 'saida')
+      .reduce((sum, t) => sum + t.amount, 0);
+  }, [transactions]);
 
   const pieData = [
     { name: 'Receitas', value: totalEntries },
@@ -92,15 +113,11 @@ export const Dashboard = () => {
   if (totalLoading || balancesLoading) {
     return (
       <div className="mb-6 space-y-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="bg-white rounded-xl shadow-md p-6 animate-pulse">
-            <div className="h-4 bg-gray-200 rounded w-24 mb-3"></div>
-            <div className="h-8 bg-gray-200 rounded w-32"></div>
-          </div>
-          <div className="bg-white rounded-xl shadow-md p-6 animate-pulse">
-            <div className="h-4 bg-gray-200 rounded w-24 mb-3"></div>
-            <div className="h-8 bg-gray-200 rounded w-32"></div>
-          </div>
+        <SkeletonLoader type="card" count={1} />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <SkeletonLoader type="card" count={1} />
+          <SkeletonLoader type="card" count={1} />
+          <SkeletonLoader type="card" count={1} />
         </div>
       </div>
     );
@@ -165,28 +182,52 @@ export const Dashboard = () => {
       {/* Cards de Saldo - Mobile First */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {/* Saldo Total */}
-        <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg p-4 sm:p-6 text-white">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm sm:text-base font-medium">Saldo Geral</h3>
-            <HiCurrencyDollar className="w-5 h-5 opacity-80" />
-          </div>
-          <p
-            className={`text-2xl sm:text-3xl font-bold ${
-              totalBalance >= 0 ? 'text-green-100' : 'text-red-100'
-            }`}
-          >
-            {formatCurrency(totalBalance)}
-          </p>
-        </div>
+        {(() => {
+          // Determinar gradiente baseado no valor
+          let gradientClass = '';
+          if (animatedTotalBalance < 150) {
+            // Vermelho (abaixo de R$ 150)
+            gradientClass = 'from-red-500 to-red-600';
+          } else if (animatedTotalBalance < 1000) {
+            // Verde claro/amarelo (entre R$ 150 e R$ 1000)
+            gradientClass = 'from-yellow-400 to-green-500';
+          } else {
+            // Verde (acima de R$ 1000)
+            gradientClass = 'from-green-500 to-emerald-600';
+          }
+
+          return (
+            <div className={`bg-gradient-to-br ${gradientClass} rounded-xl shadow-lg p-4 sm:p-6 text-white relative overflow-hidden group hover:shadow-xl transition-all duration-300`}>
+              {/* Efeito de brilho no hover */}
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white to-transparent opacity-0 group-hover:opacity-10 transform -skew-x-12 translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-1000"></div>
+              <div className="flex items-center justify-between mb-2 relative z-10">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm sm:text-base font-medium">Saldo Geral</h3>
+                  <LiveIndicator isLive={true} className="hidden sm:inline-flex" />
+                </div>
+                <HiCurrencyDollar className="w-5 h-5 opacity-80" />
+              </div>
+              <p
+                className={`text-2xl sm:text-3xl font-bold font-mono transition-all duration-300 ${
+                  animatedTotalBalance >= 0 ? 'text-green-100' : 'text-red-100'
+                }`}
+              >
+                {formatCurrency(animatedTotalBalance)}
+              </p>
+            </div>
+          );
+        })()}
 
         {/* Saldo do Mês Atual (card menor) */}
-        <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl shadow-lg p-4 sm:p-6 text-white">
-          <div className="flex items-center justify-between mb-2">
+        <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl shadow-lg p-4 sm:p-6 text-white relative overflow-hidden group hover:shadow-xl transition-all duration-300">
+          {/* Efeito de brilho no hover */}
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white to-transparent opacity-0 group-hover:opacity-10 transform -skew-x-12 translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-1000"></div>
+          <div className="flex items-center justify-between mb-2 relative z-10">
             <h3 className="text-sm sm:text-base font-medium">Saldo do Mês</h3>
             <HiCash className="w-5 h-5 opacity-80" />
           </div>
           <p
-            className={`text-2xl sm:text-3xl font-bold ${
+            className={`text-2xl sm:text-3xl font-bold font-mono transition-all duration-300 ${
               monthlyBalance >= 0 ? 'text-green-100' : 'text-red-100'
             }`}
           >
@@ -197,67 +238,70 @@ export const Dashboard = () => {
 
       {/* Estatísticas Rápidas */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-        <div className="bg-white rounded-lg shadow-md p-3 sm:p-4">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-3 sm:p-4 transition-colors">
           <div className="flex items-center gap-2 mb-1">
-            <HiTrendingUp className="w-4 h-4 text-green-600" />
-            <p className="text-xs sm:text-sm text-gray-600">Total Receitas</p>
+            <HiTrendingUp className="w-4 h-4 text-green-600 dark:text-green-400" />
+            <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Total Receitas</p>
           </div>
-          <p className="text-lg sm:text-xl font-bold text-green-600">
-            {formatCurrency(totalEntries)}
+          <p className="text-lg sm:text-xl font-bold text-green-600 dark:text-green-400 font-mono">
+            {formatCurrency(animatedTotalEntries)}
           </p>
         </div>
-        <div className="bg-white rounded-lg shadow-md p-3 sm:p-4">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-3 sm:p-4 transition-colors">
           <div className="flex items-center gap-2 mb-1">
-            <HiTrendingDown className="w-4 h-4 text-red-600" />
-            <p className="text-xs sm:text-sm text-gray-600">Total Despesas</p>
+            <HiTrendingDown className="w-4 h-4 text-red-600 dark:text-red-400" />
+            <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Total Despesas</p>
           </div>
-          <p className="text-lg sm:text-xl font-bold text-red-600">
-            {formatCurrency(totalExpenses)}
+          <p className="text-lg sm:text-xl font-bold text-red-600 dark:text-red-400 font-mono">
+            {formatCurrency(animatedTotalExpenses)}
           </p>
         </div>
-        <div className="bg-white rounded-lg shadow-md p-3 sm:p-4">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-3 sm:p-4 transition-colors">
           <div className="flex items-center gap-2 mb-1">
-            <HiCollection className="w-4 h-4 text-blue-600" />
-            <p className="text-xs sm:text-sm text-gray-600">Transações</p>
+            <HiCollection className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+            <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Transações</p>
           </div>
-          <p className="text-lg sm:text-xl font-bold text-gray-800">{transactions.length}</p>
+          <p className="text-lg sm:text-xl font-bold text-gray-800 dark:text-gray-200">{transactions.length}</p>
         </div>
-        <div className="bg-white rounded-lg shadow-md p-3 sm:p-4">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-3 sm:p-4 transition-colors">
           <div className="flex items-center gap-2 mb-1">
-            <HiCalendar className="w-4 h-4 text-purple-600" />
-            <p className="text-xs sm:text-sm text-gray-600">Meses</p>
+            <HiCalendar className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+            <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Meses</p>
           </div>
-          <p className="text-lg sm:text-xl font-bold text-gray-800">{balances.length}</p>
+          <p className="text-lg sm:text-xl font-bold text-gray-800 dark:text-gray-200">{balances.length}</p>
         </div>
       </div>
 
       {/* Gráficos */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
         {/* Gráfico de Linha - Evolução do Saldo */}
-        <div className="bg-white rounded-xl shadow-md p-4 sm:p-6">
-          <h3 className="text-lg sm:text-xl font-bold text-gray-800 mb-4">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-4 sm:p-6 transition-colors">
+          <h3 className="text-lg sm:text-xl font-bold text-gray-800 dark:text-gray-200 mb-4">
             Evolução do Saldo (6 meses)
           </h3>
           {chartData.length > 0 ? (
             <ResponsiveContainer width="100%" height={250}>
               <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <CartesianGrid strokeDasharray="3 3" stroke="currentColor" className="opacity-30" />
                 <XAxis
                   dataKey="month"
-                  tick={{ fontSize: 12 }}
-                  stroke="#6b7280"
+                  tick={{ fontSize: 12, fill: 'currentColor' }}
+                  stroke="currentColor"
+                  className="text-gray-600 dark:text-gray-400"
                 />
                 <YAxis
-                  tick={{ fontSize: 12 }}
-                  stroke="#6b7280"
+                  tick={{ fontSize: 12, fill: 'currentColor' }}
+                  stroke="currentColor"
                   tickFormatter={(value) => `R$ ${(value / 1000).toFixed(0)}k`}
+                  className="text-gray-600 dark:text-gray-400"
                 />
                 <Tooltip
                   formatter={(value: number) => formatCurrency(value)}
                   contentStyle={{
-                    backgroundColor: '#fff',
-                    border: '1px solid #e5e7eb',
+                    backgroundColor: 'var(--tooltip-bg)',
+                    border: '1px solid var(--tooltip-border)',
                     borderRadius: '8px',
+                    color: 'var(--tooltip-text)',
                   }}
                 />
                 <Legend />
@@ -272,8 +316,11 @@ export const Dashboard = () => {
               </LineChart>
             </ResponsiveContainer>
           ) : (
-            <div className="flex items-center justify-center h-[250px] text-gray-500">
-              <p>Dados insuficientes para exibir gráfico</p>
+            <div className="h-[250px]">
+              <EmptyState
+                type="dashboard"
+                message="Adicione mais transações para ver gráficos e estatísticas detalhadas."
+              />
             </div>
           )}
         </div>
@@ -305,46 +352,53 @@ export const Dashboard = () => {
                 <Tooltip
                   formatter={(value: number) => formatCurrency(value)}
                   contentStyle={{
-                    backgroundColor: '#fff',
-                    border: '1px solid #e5e7eb',
+                    backgroundColor: 'var(--tooltip-bg)',
+                    border: '1px solid var(--tooltip-border)',
                     borderRadius: '8px',
+                    color: 'var(--tooltip-text)',
                   }}
                 />
                 <Legend />
               </PieChart>
             </ResponsiveContainer>
           ) : (
-            <div className="flex items-center justify-center h-[250px] text-gray-500">
-              <p>Dados insuficientes para exibir gráfico</p>
+            <div className="h-[250px]">
+              <EmptyState
+                type="dashboard"
+                message="Adicione receitas e despesas para ver a distribuição aqui."
+              />
             </div>
           )}
         </div>
 
         {/* Gráfico de Barras - Entradas vs Saídas Mensais */}
-        <div className="bg-white rounded-xl shadow-md p-4 sm:p-6 lg:col-span-2">
-          <h3 className="text-lg sm:text-xl font-bold text-gray-800 mb-4">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-4 sm:p-6 lg:col-span-2 transition-colors">
+          <h3 className="text-lg sm:text-xl font-bold text-gray-800 dark:text-gray-200 mb-4">
             Entradas vs Saídas por Mês (6 meses)
           </h3>
           {chartData.length > 0 ? (
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <CartesianGrid strokeDasharray="3 3" stroke="currentColor" className="opacity-30" />
                 <XAxis
                   dataKey="month"
-                  tick={{ fontSize: 12 }}
-                  stroke="#6b7280"
+                  tick={{ fontSize: 12, fill: 'currentColor' }}
+                  stroke="currentColor"
+                  className="text-gray-600 dark:text-gray-400"
                 />
                 <YAxis
-                  tick={{ fontSize: 12 }}
-                  stroke="#6b7280"
+                  tick={{ fontSize: 12, fill: 'currentColor' }}
+                  stroke="currentColor"
                   tickFormatter={(value) => `R$ ${(value / 1000).toFixed(0)}k`}
+                  className="text-gray-600 dark:text-gray-400"
                 />
                 <Tooltip
                   formatter={(value: number) => formatCurrency(value)}
                   contentStyle={{
-                    backgroundColor: '#fff',
-                    border: '1px solid #e5e7eb',
+                    backgroundColor: 'var(--tooltip-bg)',
+                    border: '1px solid var(--tooltip-border)',
                     borderRadius: '8px',
+                    color: 'var(--tooltip-text)',
                   }}
                 />
                 <Legend />
@@ -353,8 +407,11 @@ export const Dashboard = () => {
               </BarChart>
             </ResponsiveContainer>
           ) : (
-            <div className="flex items-center justify-center h-[300px] text-gray-500">
-              <p>Dados insuficientes para exibir gráfico</p>
+            <div className="h-[300px]">
+              <EmptyState
+                type="dashboard"
+                message="Adicione mais transações para ver gráficos e estatísticas detalhadas."
+              />
             </div>
           )}
         </div>
@@ -364,7 +421,10 @@ export const Dashboard = () => {
       <div className="bg-white rounded-xl shadow-md p-4 sm:p-6">
         <h3 className="text-lg sm:text-xl font-bold text-gray-800 mb-4">Histórico Mensal</h3>
         {balances.length === 0 ? (
-          <p className="text-gray-500 text-center py-8">Nenhum saldo mensal disponível.</p>
+          <EmptyState
+            type="dashboard"
+            message="Após adicionar algumas transações, você verá o histórico mensal aqui."
+          />
         ) : (
           <div className="overflow-x-auto">
             <div className="min-w-full">

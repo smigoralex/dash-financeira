@@ -7,6 +7,9 @@ import { ResetPassword } from './components/ResetPassword';
 import { TransactionForm } from './components/TransactionForm';
 import { TransactionTable } from './components/TransactionTable';
 import { Dashboard } from './components/Dashboard';
+import { Tooltip } from './components/Tooltip';
+import { DarkModeToggle } from './components/DarkModeToggle';
+import { SecurityNotice } from './components/SecurityNotice';
 import { useAuth } from './hooks/useAuth';
 import { useTransactions } from './hooks/useTransactions';
 import { useMonthlyBalances } from './hooks/useMonthlyBalances';
@@ -20,7 +23,7 @@ function App() {
   const { refetch: refetchTotal } = useTotalBalance();
   const [showResetPassword, setShowResetPassword] = useState(false);
 
-  // Verificar se há token de reset password na URL
+  // Verificar se há token de reset password na URL e limpar tokens inválidos
   useEffect(() => {
     const hashParams = new URLSearchParams(window.location.hash.substring(1));
     const type = hashParams.get('type');
@@ -28,6 +31,9 @@ function App() {
     if (type === 'recovery') {
       setShowResetPassword(true);
       // Limpar a URL
+      window.history.replaceState(null, '', window.location.pathname);
+    } else if (hashParams.has('access_token') || hashParams.has('error')) {
+      // Limpar tokens inválidos ou erros da URL
       window.history.replaceState(null, '', window.location.pathname);
     }
   }, []);
@@ -73,38 +79,43 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
       {/* Header */}
-      <header className="bg-white shadow-sm sticky top-0 z-10">
+      <header className="bg-white dark:bg-gray-800 shadow-sm sticky top-0 z-10 backdrop-blur-sm bg-white/95 dark:bg-gray-800/95 transition-colors">
         <div className="container mx-auto px-4 py-4 sm:py-6 max-w-7xl">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-800 flex items-center gap-2">
+              <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-800 dark:text-white flex items-center gap-2 transition-colors">
                 💰 Gestão Financeira
               </h1>
-              <p className="text-xs sm:text-sm text-gray-600 mt-1">
+              <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mt-1 transition-colors">
                 Controle suas receitas e despesas de forma simples
               </p>
             </div>
             <div className="flex items-center gap-3">
               <div className="hidden sm:block text-right">
-                <p className="text-xs text-gray-500">Logado como</p>
-                <p className="text-sm font-medium text-gray-700">{user.email}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Logado como</p>
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{user.email}</p>
               </div>
-              <button
-                onClick={handleRefresh}
-                className="p-2 sm:p-3 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
-                title="Atualizar dados"
-              >
-                <HiRefresh className="w-5 h-5 sm:w-6 sm:h-6" />
-              </button>
-              <button
-                onClick={handleSignOut}
-                className="p-2 sm:p-3 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
-                title="Sair"
-              >
-                <HiLogout className="w-5 h-5 sm:w-6 sm:h-6" />
-              </button>
+              <DarkModeToggle />
+              <Tooltip content="Atualizar todos os dados" position="bottom">
+                <button
+                  onClick={handleRefresh}
+                  className="p-2 sm:p-3 rounded-lg bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
+                  aria-label="Atualizar dados"
+                >
+                  <HiRefresh className="w-5 h-5 sm:w-6 sm:h-6" />
+                </button>
+              </Tooltip>
+              <Tooltip content="Fazer logout da conta" position="bottom">
+                <button
+                  onClick={handleSignOut}
+                  className="p-2 sm:p-3 rounded-lg bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors"
+                  aria-label="Sair"
+                >
+                  <HiLogout className="w-5 h-5 sm:w-6 sm:h-6" />
+                </button>
+              </Tooltip>
             </div>
           </div>
         </div>
@@ -112,6 +123,9 @@ function App() {
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-6 sm:py-8 max-w-7xl">
+        {/* Aviso de Segurança */}
+        <SecurityNotice />
+        
         {/* Formulário primeiro (mais próximo ao início) */}
         <TransactionForm onSuccess={handleRefresh} />
 

@@ -1,10 +1,16 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { Transaction } from '../types/transaction';
 import { format } from 'date-fns';
 import ptBR from 'date-fns/locale/pt-BR';
 import { transactionService } from '../services/transactionService';
 import toast from 'react-hot-toast';
-import { HiSearch, HiTrash, HiDocumentText, HiCalendar } from 'react-icons/hi';
+import { HiSearch, HiTrash, HiPencil, HiCalendar, HiFilter, HiX } from 'react-icons/hi';
+import { EmptyState } from './EmptyState';
+import { EditTransactionModal } from './EditTransactionModal';
+import { Tooltip } from './Tooltip';
+import { SkeletonLoader } from './SkeletonLoader';
+import { ScrollIndicator } from './ScrollIndicator';
+import { useDebounce } from '../hooks/useDebounce';
 
 interface TransactionTableProps {
   transactions: Transaction[];
@@ -16,18 +22,35 @@ export const TransactionTable = ({ transactions, onDelete, loading }: Transactio
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'entrada' | 'saida'>('all');
   const [filterMonth, setFilterMonth] = useState<string>('all');
+  const [filterPeriod, setFilterPeriod] = useState<string>('all');
+  const [minValue, setMinValue] = useState<string>('');
+  const [maxValue, setMaxValue] = useState<string>('');
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  const tableScrollRef = useRef<HTMLDivElement>(null);
+  
+  // Debounce na busca para melhor performance
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
+  const debouncedMinValue = useDebounce(minValue, 300);
+  const debouncedMaxValue = useDebounce(maxValue, 300);
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Tem certeza que deseja excluir esta transação?')) {
+    // Melhorar feedback de confirmação
+    if (!window.confirm('Tem certeza que deseja excluir esta transação?\n\nEsta ação não pode ser desfeita.')) {
       return;
     }
 
     try {
       await transactionService.delete(id);
-      toast.success('Transação excluída com sucesso!');
+      toast.success('Transação excluída com sucesso! 🗑️', {
+        duration: 3000,
+        icon: '✅',
+      });
       onDelete();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Erro ao excluir transação');
+      toast.error(error instanceof Error ? error.message : 'Erro ao excluir transação', {
+        duration: 4000,
+      });
     }
   };
 
@@ -79,9 +102,10 @@ export const TransactionTable = ({ transactions, onDelete, loading }: Transactio
   // Filtrar transações
   const filteredTransactions = useMemo(() => {
     return transactions.filter((transaction) => {
+      // Filtro por busca (usando debouncedSearchTerm para melhor performance)
       const matchesSearch =
-        transaction.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        formatDateShort(transaction.date).includes(searchTerm);
+        transaction.description.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
+        formatDateShort(transaction.date).includes(debouncedSearchTerm);
 
       const matchesType = filterType === 'all' || transaction.type === filterType;
 
@@ -94,65 +118,110 @@ export const TransactionTable = ({ transactions, onDelete, loading }: Transactio
           return monthYear === filterMonth;
         })();
 
-      return matchesSearch && matchesType && matchesMonth;
+      // Filtro por período
+      const matchesPeriod =
+        filterPeriod === 'all' ||
+        (() => {
+          const transactionDate = new Date(transaction.date);
+          const now = new Date();
+          const diffDays = Math.floor((now.getTime() - transactionDate.getTime()) / (1000 * 60 * 60 * 24));
+
+          switch (filterPeriod) {
+            case '7days':
+              return diffDays <= 7;
+            case '30days':
+              return diffDays <= 30;
+            case '90days':
+              return diffDays <= 90;
+            case 'thisMonth':
+              return (
+                transactionDate.getMonth() === now.getMonth() &&
+                transactionDate.getFullYear() === now.getFullYear()
+              );
+            case 'lastMonth':
+              const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+              return (
+                transactionDate.getMonth() === lastMonth.getMonth() &&
+                transactionDate.getFullYear() === lastMonth.getFullYear()
+              );
+            default:
+              return true;
+          }
+        })();
+
+      // Filtro por faixa de valor
+      const matchesValueRange =
+        (!debouncedMinValue || transaction.amount >= parseFloat(debouncedMinValue)) &&
+        (!debouncedMaxValue || transaction.amount <= parseFloat(debouncedMaxValue));
+
+      return matchesSearch && matchesType && matchesMonth && matchesPeriod && matchesValueRange;
     });
-  }, [transactions, searchTerm, filterType, filterMonth]);
+  }, [
+    transactions,
+    debouncedSearchTerm,
+    filterType,
+    filterMonth,
+    filterPeriod,
+    debouncedMinValue,
+    debouncedMaxValue,
+  ]);
 
   // Loading skeleton
   if (loading) {
-    return (
-      <div className="bg-white rounded-xl shadow-md p-4 sm:p-6">
-        <h2 className="text-xl sm:text-2xl font-bold text-gray-800 mb-4">Transações</h2>
-        <div className="space-y-4">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="animate-pulse">
-              <div className="h-20 bg-gray-200 rounded-lg"></div>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
+    return <SkeletonLoader type="table" count={5} />;
   }
 
   if (transactions.length === 0) {
     return (
-      <div className="bg-white rounded-xl shadow-md p-4 sm:p-6">
-        <h2 className="text-xl sm:text-2xl font-bold text-gray-800 mb-4">Transações</h2>
-        <div className="text-center py-12">
-          <HiDocumentText className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-          <p className="text-gray-500 text-sm sm:text-base">
-            Nenhuma transação cadastrada ainda.
-          </p>
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-4 sm:p-6 transition-colors">
+        <h2 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-gray-200 mb-4">Transações</h2>
+        <div className="relative">
+          <EmptyState
+            type="transactions"
+            message="Comece registrando suas receitas e despesas para ter um controle completo das suas finanças."
+            actionLabel="Adicionar primeira transação"
+            onAction={() => {
+              // Scroll para o formulário
+              const formElement = document.querySelector('[data-transaction-form]');
+              formElement?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              // Tentar expandir o formulário
+              const expandButton = document.querySelector('[data-expand-form]') as HTMLElement;
+              expandButton?.click();
+            }}
+          />
         </div>
       </div>
     );
   }
 
   return (
-    <div className="bg-white rounded-xl shadow-md p-4 sm:p-6">
+    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-4 sm:p-6 transition-colors">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6 gap-4">
-        <h2 className="text-xl sm:text-2xl font-bold text-gray-800">Transações</h2>
+        <h2 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-gray-200">Transações</h2>
 
         {/* Filtros */}
         <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
           {/* Busca */}
-          <div className="relative flex-1 sm:flex-initial sm:min-w-[200px]">
-            <input
-              type="text"
-              placeholder="Buscar..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full px-3 py-2 pl-10 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <HiSearch className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
-          </div>
+          <Tooltip content="Busque por descrição da transação" position="bottom">
+            <div className="relative flex-1 sm:flex-initial sm:min-w-[200px]">
+              <input
+                type="text"
+                placeholder="Buscar por descrição..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full px-3 py-2 pl-10 text-sm border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                aria-label="Buscar transações"
+              />
+              <HiSearch className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
+            </div>
+          </Tooltip>
 
           {/* Filtro por mês */}
           <div className="relative flex-1 sm:flex-initial">
             <select
               value={filterMonth}
               onChange={(e) => setFilterMonth(e.target.value)}
-              className="w-full px-3 py-2 pl-10 pr-8 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white"
+              className="w-full px-3 py-2 pl-10 pr-8 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 transition-colors"
             >
               <option value="all">Todos os meses</option>
               {availableMonths.map((month) => (
@@ -178,42 +247,152 @@ export const TransactionTable = ({ transactions, onDelete, loading }: Transactio
           </div>
 
           {/* Filtro por tipo */}
-          <select
-            value={filterType}
-            onChange={(e) => setFilterType(e.target.value as 'all' | 'entrada' | 'saida')}
-            className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="all">Todos</option>
-            <option value="entrada">Receitas</option>
-            <option value="saida">Despesas</option>
-          </select>
+          <Tooltip content="Filtrar por tipo de transação" position="bottom">
+            <select
+              value={filterType}
+              onChange={(e) => setFilterType(e.target.value as 'all' | 'entrada' | 'saida')}
+              className="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 transition-colors"
+              aria-label="Filtrar por tipo"
+            >
+              <option value="all">Todos</option>
+              <option value="entrada">Receitas</option>
+              <option value="saida">Despesas</option>
+            </select>
+          </Tooltip>
+
+          {/* Botão para mostrar/ocultar filtros avançados */}
+          <Tooltip content={showAdvancedFilters ? 'Ocultar filtros avançados' : 'Mostrar filtros avançados'} position="bottom">
+            <button
+              onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+              className={`px-3 py-2 text-sm border rounded-lg transition-all flex items-center gap-2 ${
+                showAdvancedFilters
+                  ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300'
+                  : 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600'
+              } focus:outline-none focus:ring-2 focus:ring-blue-500`}
+              aria-label={showAdvancedFilters ? 'Ocultar filtros avançados' : 'Mostrar filtros avançados'}
+            >
+              <HiFilter className="w-4 h-4" />
+              <span className="hidden sm:inline">Filtros</span>
+            </button>
+          </Tooltip>
         </div>
+
+        {/* Filtros Avançados */}
+        {showAdvancedFilters && (
+          <div className="mt-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600 animate-slideUp transition-colors">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                <HiFilter className="w-4 h-4" />
+                Filtros Avançados
+              </h3>
+              <button
+                onClick={() => {
+                  setFilterPeriod('all');
+                  setMinValue('');
+                  setMaxValue('');
+                }}
+                className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium flex items-center gap-1"
+                aria-label="Limpar filtros avançados"
+              >
+                <HiX className="w-4 h-4" />
+                Limpar
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {/* Filtro por Período */}
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Período</label>
+                <select
+                  value={filterPeriod}
+                  onChange={(e) => setFilterPeriod(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 transition-colors"
+                  aria-label="Filtrar por período"
+                >
+                  <option value="all">Todos os períodos</option>
+                  <option value="7days">Últimos 7 dias</option>
+                  <option value="30days">Últimos 30 dias</option>
+                  <option value="90days">Últimos 90 dias</option>
+                  <option value="thisMonth">Este mês</option>
+                  <option value="lastMonth">Mês passado</option>
+                </select>
+              </div>
+
+              {/* Filtro por Valor Mínimo */}
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Valor Mínimo (R$)</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-gray-500 text-sm">R$</span>
+                  <input
+                    type="number"
+                    value={minValue}
+                    onChange={(e) => setMinValue(e.target.value)}
+                    placeholder="0.00"
+                    min="0"
+                    step="0.01"
+                    className="w-full pl-10 pr-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 transition-colors"
+                    aria-label="Valor mínimo"
+                  />
+                </div>
+              </div>
+
+              {/* Filtro por Valor Máximo */}
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Valor Máximo (R$)</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-gray-500 dark:text-gray-400 text-sm">R$</span>
+                  <input
+                    type="number"
+                    value={maxValue}
+                    onChange={(e) => setMaxValue(e.target.value)}
+                    placeholder="999999.99"
+                    min="0"
+                    step="0.01"
+                    className="w-full pl-10 pr-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 transition-colors"
+                    aria-label="Valor máximo"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
-      {filteredTransactions.length === 0 ? (
-        <div className="text-center py-8">
-          <p className="text-gray-500">Nenhuma transação encontrada com os filtros aplicados.</p>
-        </div>
-      ) : (
+      {filteredTransactions.length === 0 && transactions.length > 0 ? (
+        <EmptyState
+          type="search"
+          message="Não encontramos transações com os filtros aplicados. Tente ajustar os filtros ou limpar a busca."
+          actionLabel="Limpar todos os filtros"
+          onAction={() => {
+            setSearchTerm('');
+            setFilterType('all');
+            setFilterMonth('all');
+            setFilterPeriod('all');
+            setMinValue('');
+            setMaxValue('');
+            setShowAdvancedFilters(false);
+          }}
+        />
+      ) : filteredTransactions.length === 0 ? null : (
         <>
           {/* Mobile View - Cards */}
           <div className="sm:hidden space-y-3">
             {filteredTransactions.map((transaction) => (
               <div
                 key={transaction.id}
-                className="bg-gray-50 rounded-lg p-4 border border-gray-200 hover:shadow-md transition-shadow"
+                className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 border border-gray-200 dark:border-gray-600 hover:shadow-md transition-all"
               >
                 <div className="flex justify-between items-start mb-2">
                   <div className="flex-1">
-                    <p className="font-medium text-gray-900 text-sm mb-1">
+                    <p className="font-medium text-gray-900 dark:text-gray-100 text-sm mb-1">
                       {transaction.description}
                     </p>
-                    <p className="text-xs text-gray-500">{formatDateShort(transaction.date)}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">{formatDateShort(transaction.date)}</p>
                   </div>
                   <div className="text-right">
                     <p
                       className={`text-base font-bold ${
-                        transaction.type === 'entrada' ? 'text-green-600' : 'text-red-600'
+                        transaction.type === 'entrada' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
                       }`}
                     >
                       {transaction.type === 'entrada' ? '+' : '-'}
@@ -222,63 +401,80 @@ export const TransactionTable = ({ transactions, onDelete, loading }: Transactio
                     <span
                       className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full mt-1 ${
                         transaction.type === 'entrada'
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-red-100 text-red-800'
+                          ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300'
+                          : 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300'
                       }`}
                     >
                       {transaction.type === 'entrada' ? 'Receita' : 'Despesa'}
                     </span>
                   </div>
                 </div>
-                <button
-                  onClick={() => handleDelete(transaction.id)}
-                  className="mt-3 w-full text-center text-sm text-red-600 hover:text-red-800 font-medium py-2 border border-red-200 rounded-lg hover:bg-red-50 transition-colors flex items-center justify-center gap-2"
-                >
-                  <HiTrash className="w-4 h-4" />
-                  Excluir
-                </button>
+                <div className="flex gap-2 mt-3">
+                  <Tooltip content="Editar esta transação" position="top">
+                    <button
+                      onClick={() => setEditingTransaction(transaction)}
+                      className="flex-1 text-center text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium py-2 border border-blue-200 dark:border-blue-700 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors flex items-center justify-center gap-2"
+                      aria-label="Editar transação"
+                    >
+                      <HiPencil className="w-4 h-4" />
+                      Editar
+                    </button>
+                  </Tooltip>
+                  <Tooltip content="Excluir esta transação" position="top">
+                    <button
+                      onClick={() => handleDelete(transaction.id)}
+                      className="flex-1 text-center text-sm text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 font-medium py-2 border border-red-200 dark:border-red-700 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors flex items-center justify-center gap-2"
+                      aria-label="Excluir transação"
+                    >
+                      <HiTrash className="w-4 h-4" />
+                      Excluir
+                    </button>
+                  </Tooltip>
+                </div>
               </div>
             ))}
           </div>
 
           {/* Desktop View - Table */}
-          <div className="hidden sm:block overflow-x-auto">
+          <div ref={tableScrollRef} className="hidden sm:block overflow-x-auto relative">
+            <ScrollIndicator containerRef={tableScrollRef} />
             <table className="w-full border-collapse">
               <thead>
-                <tr className="bg-gray-50 border-b">
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <tr className="bg-gray-50 dark:bg-gray-700/50 border-b dark:border-gray-600">
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     Data
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     Descrição
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     Tipo
                   </th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     Valor
                   </th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     Ações
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
-                {filteredTransactions.map((transaction) => (
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                {filteredTransactions.map((transaction, index) => (
                   <tr
                     key={transaction.id}
-                    className="hover:bg-gray-50 transition-colors cursor-pointer"
+                    className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-all duration-300 animate-fadeIn"
+                    style={{ animationDelay: `${index * 30}ms` }}
                   >
-                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">
                       {formatDate(transaction.date)}
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-900">{transaction.description}</td>
+                    <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{transaction.description}</td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <span
                         className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                           transaction.type === 'entrada'
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-red-100 text-red-800'
+                          ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300'
+                          : 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300'
                         }`}
                       >
                         {transaction.type === 'entrada' ? 'Receita' : 'Despesa'}
@@ -295,13 +491,28 @@ export const TransactionTable = ({ transactions, onDelete, loading }: Transactio
                       </span>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-center">
+                      <div className="flex items-center justify-center gap-2">
+                    <Tooltip content="Editar transação" position="top">
+                      <button
+                        onClick={() => setEditingTransaction(transaction)}
+                        className="text-blue-600 hover:text-blue-800 font-medium text-sm transition-colors px-2 py-1 rounded hover:bg-blue-50 flex items-center justify-center gap-1"
+                        aria-label="Editar transação"
+                      >
+                        <HiPencil className="w-4 h-4" />
+                        <span className="hidden lg:inline">Editar</span>
+                      </button>
+                    </Tooltip>
+                    <Tooltip content="Excluir transação" position="top">
                       <button
                         onClick={() => handleDelete(transaction.id)}
-                        className="text-red-600 hover:text-red-800 font-medium text-sm transition-colors px-2 py-1 rounded hover:bg-red-50 flex items-center justify-center gap-1 mx-auto"
+                        className="text-red-600 hover:text-red-800 font-medium text-sm transition-colors px-2 py-1 rounded hover:bg-red-50 flex items-center justify-center gap-1"
+                        aria-label="Excluir transação"
                       >
                         <HiTrash className="w-4 h-4" />
-                        Excluir
+                        <span className="hidden lg:inline">Excluir</span>
                       </button>
+                    </Tooltip>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -310,12 +521,24 @@ export const TransactionTable = ({ transactions, onDelete, loading }: Transactio
           </div>
 
           {/* Contador de resultados */}
-          <div className="mt-4 pt-4 border-t border-gray-200">
-            <p className="text-sm text-gray-600 text-center sm:text-left">
+          <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+            <p className="text-sm text-gray-600 dark:text-gray-400 text-center sm:text-left">
               Mostrando {filteredTransactions.length} de {transactions.length} transações
             </p>
           </div>
         </>
+      )}
+
+      {/* Modal de Edição */}
+      {editingTransaction && (
+        <EditTransactionModal
+          transaction={editingTransaction}
+          isOpen={!!editingTransaction}
+          onClose={() => setEditingTransaction(null)}
+          onSuccess={() => {
+            onDelete(); // Recarregar dados
+          }}
+        />
       )}
     </div>
   );
